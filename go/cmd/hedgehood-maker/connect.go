@@ -15,13 +15,15 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/0xHedgeHood/hedgehood-maker-sdk/go/maker"
+	"github.com/0xHedgeHood/sdks/go/maker"
 )
 
 // demoPricer answers at a fixed premium per whole underlying token, or at a fixed bps of the notional
-// (amount x strike), on the sides it is told to quote. A demo, not a model.
-func demoPricer(perToken *big.Int, bps int64, sides string, maxAmount *big.Int) maker.Pricer {
-	return func(_ context.Context, r maker.RFQ) (maker.Answer, error) {
+// (amount x strike), on the sides it is told to quote. A close (MakerSells) is quoted only when canSell finds the
+// long (Reader.CanSell); without canSell closes are declined. A demo, not a model.
+func demoPricer(perToken *big.Int, bps int64, sides string, maxAmount *big.Int,
+	canSell func(context.Context, maker.RFQ) (string, error)) maker.Pricer {
+	return func(ctx context.Context, r maker.RFQ) (maker.Answer, error) {
 		switch {
 		case sides == "buy" && !r.MakerBuys():
 			return maker.DeclineWith("no_inventory"), nil
@@ -29,6 +31,18 @@ func demoPricer(perToken *big.Int, bps int64, sides string, maxAmount *big.Int) 
 			return maker.DeclineWith("side_not_quoted"), nil
 		case maxAmount != nil && maxAmount.Sign() > 0 && r.Amount.Cmp(maxAmount) > 0:
 			return maker.DeclineWith("too_big"), nil
+		}
+		if !r.MakerBuys() {
+			if canSell == nil {
+				return maker.DeclineWith("no_inventory"), nil
+			}
+			why, err := canSell(ctx, r)
+			if err != nil {
+				return maker.DeclineWith("unavailable"), nil
+			}
+			if why != "" {
+				return maker.DeclineWith("no_inventory"), nil
+			}
 		}
 		var p *big.Int
 		if perToken != nil {
@@ -104,8 +118,16 @@ func cmdConnect(e env, args []string) error {
 	}
 	log := slog.New(slog.NewTextHandler(e.stderr, &slog.HandlerOptions{Level: level}))
 	var out sync.Mutex
+	var c *maker.Client
+	var canSell func(context.Context, maker.RFQ) (string, error)
+	if *sides != "buy" { // closes: quote only what the maker holds (the gateway rejects the rest as inventory)
+		reader := maker.NewReader(net, "")
+		canSell = func(ctx context.Context, r maker.RFQ) (string, error) {
+			return reader.CanSell(ctx, c.Maker(), r.Series, r.Amount.Int)
+		}
+	}
 	cfg := maker.Config{URL: url, Signer: key, Maker: makerAddr, QuoteLife: *life,
-		Pricer: demoPricer(perToken, *bps, *sides, maxRaw), Logger: log,
+		Pricer: demoPricer(perToken, *bps, *sides, maxRaw, canSell), Logger: log,
 		OnEvent: func(f maker.Frame) { out.Lock(); printEvent(e.stdout, f); out.Unlock() }}
 	if !*noPin {
 		cfg.ChainID, cfg.Settler = net.ChainID, net.Settler
@@ -122,7 +144,7 @@ func cmdConnect(e env, args []string) error {
 			return err
 		}
 	}
-	c, err := maker.NewClient(cfg)
+	c, err = maker.NewClient(cfg)
 	if err != nil {
 		return err
 	}

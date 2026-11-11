@@ -2,7 +2,7 @@
 
 import { createPublicClient, custom, decodeAbiParameters, encodeAbiParameters, type Hex } from "viem";
 import { describe, expect, it } from "vitest";
-import { quoteValues } from "../src/eip712.js";
+import { quoteValues, seriesId } from "../src/eip712.js";
 import { TESTNET } from "../src/networks.js";
 import { masks, NonceManager, split } from "../src/nonces.js";
 import { Reader, RPCError } from "../src/rpc.js";
@@ -167,5 +167,22 @@ describe("Reader", () => {
     expect(await r.pendingWithdraw(TESTNET.quoteToken, MAKER)).toEqual({ amount: 5n, availableAt: 1_800_000_300n });
     expect(rpc.requests.every((p) => p.method === "eth_call" || p.method === "eth_chainId")).toBe(true); // reads only
     await expect(r.nonceUsed(MAKER, 1)).rejects.toThrow(RPCError);
+  });
+});
+
+describe("Reader.canSell", () => {
+  it("needs the long and the settler as operator", async () => {
+    const long = S.selector(S.LONG_BALANCE).slice(2);
+    const op = S.selector(S.IS_OPERATOR).slice(2);
+    const series = G.QUOTE.series;
+    let rpc = fakeRpc({ [long]: enc(["uint256"], [2n * 10n ** 18n]), [op]: enc(["bool"], [true]) });
+    let r = Reader.forNetwork(TESTNET, { client: rpc.client });
+    expect(await r.canSell(MAKER, series, 2n * 10n ** 18n)).toBeNull();
+    const first = rpc.requests[0]!.params as [{ data: Hex }];
+    expect(first[0].data).toBe(S.calldata(S.LONG_BALANCE, MAKER, seriesId(series)));
+    expect(await r.canSell(MAKER, series, 3n * 10n ** 18n)).toMatch(/^holds/);
+    rpc = fakeRpc({ [long]: enc(["uint256"], [2n * 10n ** 18n]), [op]: enc(["bool"], [false]) });
+    r = Reader.forNetwork(TESTNET, { client: rpc.client });
+    expect(await r.canSell(MAKER, series, 10n ** 18n)).toMatch(/operator/);
   });
 });

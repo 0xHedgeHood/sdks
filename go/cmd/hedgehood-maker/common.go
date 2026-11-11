@@ -13,7 +13,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/0xHedgeHood/hedgehood-maker-sdk/go/maker"
+	"github.com/0xHedgeHood/sdks/go/maker"
 )
 
 var errUsage = errors.New("usage")

@@ -13,7 +13,7 @@ from eth_abi import decode
 from eth_utils import to_checksum_address
 
 from . import settler as S
-from .eip712 import quote_values, series_values
+from .eip712 import quote_values, series_id, series_values
 from .models import Quote, Series
 from .networks import Network
 
@@ -109,6 +109,17 @@ class Reader:
         if not self.core:
             raise ValueError("core address not set")
         return self.call(self.core, S.LONG_BALANCE, (to_checksum_address(owner), int(series_id)), ["uint256"])[0]
+
+    def can_sell(self, maker: str, series: Series, amount: int) -> str | None:
+        """Why the settler could not deliver `amount` of `series` from `maker` (None: it can). The gateway rejects a
+        close quote it cannot fill (`inventory`): check before quoting one. The settler moves the long as the maker's
+        OptionsCore operator (`setOperator`, the SDK's setup path)."""
+        held = self.long_balance(maker, series_id(series))
+        if held < int(amount):
+            return f"holds {held} of {int(amount)}"
+        if not self.is_operator(maker):
+            return "the settler is not the maker's operator on OptionsCore (setOperator)"
+        return None
 
     def token_balance(self, token: str, account: str) -> int:
         return self.call(to_checksum_address(token), S.ERC20_BALANCE, (to_checksum_address(account),), ["uint256"])[0]

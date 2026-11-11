@@ -1,7 +1,9 @@
 /**
  * A minimal maker: quotes every listed TESTNET request at a fixed volatility (Black-Scholes on a spot you pass) or at
  * a fixed premium in basis points of the notional. A starting point, not a pricing model: no spot feed, no hedging,
- * no inventory limits beyond --max-amount. The TypeScript twin of examples/simple_maker.py.
+ * no inventory limits beyond --max-amount. With --sell it also quotes early closes, but only for series it holds (it
+ * reads its longs on chain first; the gateway would reject the rest as `inventory`). The TypeScript twin of
+ * examples/simple_maker.py.
  *
  *     npm run build
  *     export HEDGEHOOD_SIGNER_KEY=0x...     # the maker key, or a hot key the maker delegated with setSigner
@@ -69,8 +71,28 @@ export interface PricerArgs {
   sell: boolean;
 }
 
-/** The pricer: theo less (buys) or plus (sells) the edge, all-in after the settler's fee. */
-export function makePricer(args: PricerArgs, fees: () => { feeBps: number; notionalFeeBps: number }) {
+/**
+ * The pricer: theo less (buys) or plus (sells) the edge, all-in after the settler's fee. A close (MakerSells) is quoted
+ * only when `canSell` says the maker holds the long (`Reader.canSell`); without it closes are declined.
+ */
+export function makePricer(
+  args: PricerArgs,
+  fees: () => { feeBps: number; notionalFeeBps: number },
+  canSell?: (rfq: RFQ) => Promise<string | null>,
+) {
+  const price = staticPricer(args, fees);
+  return (rfq: RFQ): PricerResult | Promise<PricerResult> => {
+    const p = price(rfq);
+    if (rfq.side === MAKER_BUYS || p instanceof Decline) return p;
+    if (!canSell) return new Decline("no_inventory");
+    return canSell(rfq).then(
+      (why) => (why ? new Decline("no_inventory") : p),
+      () => new Decline("unavailable"),
+    );
+  };
+}
+
+function staticPricer(args: PricerArgs, fees: () => { feeBps: number; notionalFeeBps: number }) {
   const listed = new Map(Object.entries(TESTNET.underlyings).map(([name, u]) => [`${u.token}|${u.oracle}`, name]));
   return (rfq: RFQ): PricerResult => {
     const s = rfq.series;
@@ -129,7 +151,7 @@ async function main(): Promise<void> {
       return [name, Number(price)];
     }),
   );
-  const reader = a["check-rpc"] ? Reader.forNetwork(TESTNET) : undefined;
+  const reader = a["check-rpc"] || a.sell ? Reader.forNetwork(TESTNET) : undefined;
   // the pricer reads the fee parameters the gateway announced at login
   const box: { client?: MakerClient } = {};
   const pricer = makePricer(
@@ -143,6 +165,7 @@ async function main(): Promise<void> {
       sell: a.sell,
     },
     () => box.client!.session!,
+    reader ? (rfq) => reader.canSell(box.client!.maker, rfq.series, rfq.amount) : undefined,
   );
   const client = new MakerClient({
     url: a.gateway,
@@ -152,7 +175,7 @@ async function main(): Promise<void> {
     quoteLife: Number(a.life),
     chainId: TESTNET.chainId,
     settler: TESTNET.settler,
-    epochReader: reader ? (m) => reader.epoch(m) : undefined,
+    epochReader: reader && a["check-rpc"] ? (m) => reader.epoch(m) : undefined,
     logger: {
       debug() {},
       info: (m) => console.log(new Date().toISOString(), m),

@@ -38,7 +38,8 @@ def pricer():
         for k, v in kw.items():
             setattr(args, k, v)
         p = m.Pricer(args)
-        p.client = Namespace(session=Session("0x" + "aa" * 20, "0x" + "aa" * 20, 46630, TESTNET.settler, 0, 1250, 100))
+        p.client = Namespace(session=Session("0x" + "aa" * 20, "0x" + "aa" * 20, 46630, TESTNET.settler, 0, 1250, 100),
+                             maker="0x" + "aa" * 20)
         return p
 
     return make
@@ -56,6 +57,29 @@ def test_vol_pricer_and_declines(pricer):
     assert pricer()(rfq(amount=11 * 10**18)) == Decline("too_large")
     assert pricer()(rfq(underlying="0x" + "22" * 20)) == Decline("unlisted")
     assert pricer(mode="vol", spot=[])(rfq()) == Decline("no_price")
+
+
+def test_sell_quotes_only_what_the_maker_holds(pricer):
+    asked = []
+
+    class Reader:
+        def __init__(self, why):
+            self.why = why
+
+        def can_sell(self, maker, series, amount):
+            asked.append((maker, series.strike, amount))
+            if self.why == "down":
+                raise OSError("rpc down")
+            return self.why
+
+    p = pricer(sell=True)
+    p.reader = Reader(None)
+    assert isinstance(p(rfq(side=1)), int)                      # holds the long: quotes the close
+    assert asked == [("0x" + "aa" * 20, 330_000_000, 10**18)]
+    p.reader = Reader("holds 0 of 1000000000000000000")
+    assert p(rfq(side=1)) == Decline("no_inventory")             # holds nothing: declines, never rejected
+    p.reader = Reader("down")
+    assert p(rfq(side=1)) == Decline("unavailable")
 
 
 def test_onboard_prints_unsigned_transactions(monkeypatch, capsys):

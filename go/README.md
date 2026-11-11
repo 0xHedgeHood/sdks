@@ -7,7 +7,7 @@ the (unsigned) on-chain setup transactions.
 > **Testnet only** (Robinhood Chain testnet, chainId 46630). The options core contracts are not yet audited; mainnet
 > addresses are TBD. The protocol reference is [docs/MAKER_GUIDE.md](../docs/MAKER_GUIDE.md).
 
-Module `github.com/0xHedgeHood/hedgehood-maker-sdk/go`, Go 1.27.3+, dependencies `go-ethereum` and
+Module `github.com/0xHedgeHood/sdks/go`, Go 1.27.3+, dependencies `go-ethereum` and
 `coder/websocket`. Package `maker`:
 
 - `Client`: login, a `Pricer` per request whose context expires at `respondBy` − 150 ms, quote building and signing
@@ -19,12 +19,12 @@ Module `github.com/0xHedgeHood/hedgehood-maker-sdk/go`, Go 1.27.3+, dependencies
   `invalidateNonces`, `linkMaker`, ERC-20 `approve`, `OptionsCore.setOperator` and `redeemLong`, each with a
   `cast send` line. Nothing in this module signs or sends a transaction.
 - `Fee`, `PreviewFill`, `PremiumForNet`: the settler's fee and pro-rata math; `NonceManager`; `Reader` (read-only
-  `eth_call`s: epoch, signer expiry, balances, allowances, fees, `quoteDigest`).
+  `eth_call`s: epoch, signer expiry, balances, allowances, fees, `quoteDigest`, `CanSell`).
 
 ## CLI
 
 ```
-cd go && go build ./cmd/hedgehood-maker      # or: go install github.com/0xHedgeHood/hedgehood-maker-sdk/go/cmd/hedgehood-maker@<ref>
+cd go && go build ./cmd/hedgehood-maker      # or: go install github.com/0xHedgeHood/sdks/go/cmd/hedgehood-maker@<ref>
 
 # 1. onboarding: print the unsigned transactions, review them, send each yourself
 hedgehood-maker tx setSigner --maker 0xYourMaker --signer 0xYourHotKey --days 7
@@ -67,6 +67,11 @@ err = c.Run(ctx) // returns nil when ctx ends; a refused login or a wrong deploy
 
 A pricer may also return `maker.SendQuote(q)` with `q` from `c.BuildQuote(r, premium, maker.ValidFor(30*time.Second),
 maker.WithExternalAccount(wallet))`. Use `maker.PremiumForNet` to quote an all-in price.
+
+Before quoting an early close (a MakerSells request), check you hold the long: `reader.CanSell(ctx, maker, r.Series,
+r.Amount.Int)` returns why the settler could not deliver it ("" when it can); the gateway rejects anything else as
+`inventory`. A runnable library example that does this: [examples/simple-maker](examples/simple-maker)
+(`go run ./examples/simple-maker -bps 40 -sell`). The CLI's `connect --sides sell|both` checks the same way.
 
 ## Development
 

@@ -29,7 +29,7 @@ function rfq(side = 0, amount = 10n ** 18n, underlying: string = TSLA.token): RF
   }) as RFQ;
 }
 
-function pricer(over: Partial<PricerArgs> = {}) {
+function pricer(over: Partial<PricerArgs> = {}, canSell?: (rfq: RFQ) => Promise<string | null>) {
   const args: PricerArgs = {
     mode: "bps",
     bps: 50,
@@ -40,7 +40,7 @@ function pricer(over: Partial<PricerArgs> = {}) {
     sell: false,
     ...over,
   };
-  return makePricer(args, () => ({ feeBps: 1250, notionalFeeBps: 100 }));
+  return makePricer(args, () => ({ feeBps: 1250, notionalFeeBps: 100 }), canSell);
 }
 
 describe("examples/simple-maker.ts", () => {
@@ -65,5 +65,20 @@ describe("examples/simple-maker.ts", () => {
     const c = blackScholes(330, 300, 0.25, 0.6, false);
     const p = blackScholes(330, 300, 0.25, 0.6, true);
     expect(c - p).toBeCloseTo(30, 5);
+  });
+
+  it("quotes a close only for a series the maker holds", async () => {
+    const asked: bigint[] = [];
+    const holds = (why: string | null) => async (r: RFQ) => {
+      asked.push(r.amount);
+      return why;
+    };
+    expect(typeof (await pricer({ sell: true }, holds(null))(rfq(1)))).toBe("bigint");
+    expect(asked).toEqual([10n ** 18n]);
+    expect(await pricer({ sell: true }, holds("holds 0 of 1"))(rfq(1))).toEqual(new Decline("no_inventory"));
+    expect(await pricer({ sell: true }, () => Promise.reject(new Error("rpc down")))(rfq(1))).toEqual(
+      new Decline("unavailable"),
+    );
+    expect(pricer({ sell: true })(rfq(1))).toEqual(new Decline("no_inventory")); // no reader: no closes
   });
 });

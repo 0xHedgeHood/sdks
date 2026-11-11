@@ -267,6 +267,27 @@ func (r *Reader) LongBalance(ctx context.Context, owner common.Address, seriesID
 	return r.bigOf(ctx, c, "core.balanceOf", owner, nz(seriesID))
 }
 
+// CanSell reports why the settler could not deliver amount of s from maker ("" = it can). The gateway rejects a close
+// quote it cannot fill (`inventory`): check before quoting one. The settler moves the long as the maker's OptionsCore
+// operator (setOperator, the SDK's setup path).
+func (r *Reader) CanSell(ctx context.Context, maker common.Address, s Series, amount *big.Int) (string, error) {
+	held, err := r.LongBalance(ctx, maker, SeriesID(s))
+	if err != nil {
+		return "", err
+	}
+	if held.Cmp(nz(amount)) < 0 {
+		return fmt.Sprintf("holds %s of %s", held, nz(amount)), nil
+	}
+	ok, err := r.IsOperator(ctx, maker, common.Address{})
+	if err != nil {
+		return "", err
+	}
+	if !ok {
+		return "the settler is not the maker's operator on OptionsCore (setOperator)", nil
+	}
+	return "", nil
+}
+
 // TokenBalance is ERC-20 balanceOf(account).
 func (r *Reader) TokenBalance(ctx context.Context, token, account common.Address) (*big.Int, error) {
 	return r.bigOf(ctx, token, "erc20.balanceOf", account)

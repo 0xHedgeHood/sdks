@@ -1,4 +1,4 @@
-module github.com/0xHedgeHood/hedgehood-maker-sdk/go
+module github.com/0xHedgeHood/sdks/go
 
 go 1.27.3
 
