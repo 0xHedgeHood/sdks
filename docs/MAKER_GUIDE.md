@@ -58,9 +58,15 @@ Questions during any stage go to the Hedgehood team contact you got at the intro
    | Wallet by allowance | the paying wallet | `USDG.approve(settler, x)` from that wallet; if it is not the maker, it also calls `linkMaker(maker, true)` once | Nothing parked in the settler. On MakerSells the net premium goes straight to that wallet. |
 
 4. **To sell longs you hold (MakerSells)**: `OptionsCore.setOperator(settler, true)` from the maker.
-5. **Build the transactions** with `python examples/onboard.py ...` (prints unsigned transactions and `cast send`
-   lines; `--rpc` also shows the current on-chain state). Review them and send each yourself.
-6. **Connect**: `python examples/simple_maker.py ...`, or your own `MakerClient` (see the [README](../README.md)).
+5. **Build the transactions** with `python examples/onboard.py ...` from
+   [hedgehood-maker-py](https://github.com/0xHedgeHood/hedgehood-maker-py), or `hedgehood-maker tx ...` from
+   [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go) (both print unsigned transactions and
+   `cast send` lines; `onboard.py --rpc` and `hedgehood-maker state` also show the current on-chain state). Review them
+   and send each yourself.
+6. **Connect**: `python examples/simple_maker.py ...`, `hedgehood-maker connect ...`, or your own `MakerClient` in
+   [Python](https://github.com/0xHedgeHood/hedgehood-maker-py),
+   [TypeScript](https://github.com/0xHedgeHood/hedgehood-maker-ts) or
+   [Go](https://github.com/0xHedgeHood/hedgehood-maker-go).
 7. **Test end to end** on testnet by requesting a quote yourself (any taker address works for a quote; filling needs
    the taker's collateral and approvals):
 

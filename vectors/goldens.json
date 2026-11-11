@@ -1,0 +1,78 @@
+{
+  "about": "Golden vectors for the RfqSettler EIP-712 quote encoding. Every Hedgehood maker SDK (hedgehood-maker-py, hedgehood-maker-ts, hedgehood-maker-go) and the Solidity, gateway and desk implementations must reproduce them byte for byte. Same fixed quote, settler proxy at the Solidity test's second CREATE, chain 46630.",
+  "source": "hedgehood-options contracts/test/core/AbiCoreGolden.t.sol and forge methodIdentifiers, options core v3 (hedgehood-options-core 4f0cd1e)",
+  "chainId": 46630,
+  "settler": "0x5991A2dF15A8F6A256D3Ec51E99254Cd3fb576A9",
+  "series": {
+    "underlying": "0x267ddeE02B44FDF4D073E124869DaA5BDbF1759D",
+    "quote": "0x850DE815d41F6983Aaf09247f9a465c0aefff04C",
+    "oracle": "0x0767e42f22cF3D0Ee3b49d5eDAad65b62CD0B3a2",
+    "expiry": 1793826000,
+    "isPut": false,
+    "strike": "215000000",
+    "physical": false
+  },
+  "quote": {
+    "maker": "0x17BC7b00422fdb926D408887B13e9bF3Cf9bd308",
+    "signer": "0x17BC7b00422fdb926D408887B13e9bF3Cf9bd308",
+    "taker": "0x36437b878415EdA1a24186CF79AFffBc9ecEd298",
+    "externalAccount": "0x0000000000000000000000000000000000000000",
+    "side": 0,
+    "amount": "5000000000000000000",
+    "minFill": "0",
+    "premium": "5164250",
+    "validUntil": 1793766600,
+    "nonce": "42",
+    "epoch": "0"
+  },
+  "signerKey": "0x0000000000000000000000000000000000000000000000000000000000000007",
+  "seriesId": "11623297058463634065704459141464122235595256587129134766422972952495797106800",
+  "digest": "0x15adc15e4a460be6a0dd0cde1a16c01c5d1e74d73bcc5edd7a54823a7dcfd81e",
+  "signature": "0x141373907102bdbdb3f7cecfa039b039ad6e6af54fe5a7ce0f195f6709e396ed3360ba613c6f7d76706fa18b4c6123a20896befeeb53ec9c9a2ae8afbb29577d1b",
+  "fillCalldataHash": {
+    "amount": "5000000000000000000",
+    "hash": "0x1c808620179dc62b8a80b4ae0556db4f4ac8d99a89b035f54d6b3ce1167855d0"
+  },
+  "closeCalldataHash": {
+    "amount": "1000000000000000000",
+    "hash": "0x7cdac40d9224ced1edd8d9a3374fb657e30f9565c08287df53a890c81dab1e36"
+  },
+  "testnetDomainSeparator": {
+    "settler": "0xda43b0933031e41D5B367E1807536FcF4ebdEE7e",
+    "chainId": 46630,
+    "value": "0xb21e093b8f5159c565f78c4205db5b8f1d41abad3822682cf1c2c22a3107c7b6"
+  },
+  "typeStrings": {
+    "series": "SeriesParams(address underlying,address quote,address oracle,uint64 expiry,bool isPut,uint256 strike,bool physical)",
+    "quote": "Quote(address maker,address signer,address taker,address externalAccount,SeriesParams series,uint8 side,uint256 amount,uint256 minFill,uint256 premium,uint64 validUntil,uint256 nonce,uint256 epoch)SeriesParams(address underlying,address quote,address oracle,uint64 expiry,bool isPut,uint256 strike,bool physical)"
+  },
+  "selectors": {
+    "setSigner": "07843c87",
+    "deposit": "8340f549",
+    "requestWithdraw": "397a1b28",
+    "withdraw": "f940e385",
+    "increaseEpoch": "ad96cd5d",
+    "invalidateNonces": "9423b210",
+    "linkMaker": "6aeac35f",
+    "fill": "8476ec41",
+    "close": "16ec32b8",
+    "epoch": "8b810c36",
+    "signerExpiry": "e57def0c",
+    "nonceUsed": "1647795e",
+    "settlerBalanceOf": "f7888aec",
+    "pendingWithdraw": "742e1c0f",
+    "linked": "f476ea2b",
+    "feeBps": "24a9d853",
+    "notionalFeeBps": "1faa35a9",
+    "quoteDigest": "1d971f5d",
+    "previewFill": "f59a193d",
+    "isListed": "5c86bf56",
+    "core.setOperator": "558a7297",
+    "core.isOperator": "b6363cf2",
+    "core.balanceOf": "00fdd58e",
+    "core.redeemLong": "f8ad1b36",
+    "erc20.approve": "095ea7b3",
+    "erc20.allowance": "dd62ed3e",
+    "erc20.balanceOf": "70a08231"
+  }
+}

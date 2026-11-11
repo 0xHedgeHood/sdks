@@ -9,17 +9,16 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  vectors:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python: ["3.10", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python }}
-      - run: python -m pip install -e ".[dev]"
-      - run: ruff check .
-      - run: pytest -q
+      - name: vectors/goldens.json is valid JSON with the fields the SDKs read
+        run: |
+          python3 - <<'PY'
+          import json
+          v = json.load(open("vectors/goldens.json"))
+          for k in ("chainId", "settler", "series", "quote", "signerKey", "seriesId", "digest", "signature",
+                    "fillCalldataHash", "closeCalldataHash", "testnetDomainSeparator", "typeStrings", "selectors"):
+              assert k in v, k
+          PY
