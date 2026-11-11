@@ -14,7 +14,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -345,6 +348,39 @@ func TestInventoryCheckReadsOnlyTheRequestsDeployment(t *testing.T) {
 		}
 	}
 	if n != 1 {
+		t.Fatalf("eth_chainId read %d times, want once", n)
+	}
+}
+
+// Closes that arrive together before the first eth_chainId answer still read it once.
+func TestInventoryCheckReadsTheChainOnceUnderConcurrency(t *testing.T) {
+	settler := common.HexToAddress(tMaker)
+	var chainReads atomic.Int32
+	reader := &maker.Reader{Settler: settler, Core: common.HexToAddress(tHot),
+		Transport: func(_ context.Context, method string, _ []any) (json.RawMessage, error) {
+			if method == "eth_chainId" {
+				chainReads.Add(1)
+				time.Sleep(50 * time.Millisecond) // a slow first answer
+				return json.RawMessage(`"0xb626"`), nil
+			}
+			return json.RawMessage(`"0x` + strings.Repeat("0", 63) + `1"`), nil
+		}}
+	check := inventoryCheck(reader, func() common.Address { return settler },
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := maker.RFQ{ChainID: 46630, Settler: settler, Side: maker.MakerSells, Amount: maker.Dec{Int: big.NewInt(1)},
+		Series: maker.Series{Strike: big.NewInt(1)}}
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if why, err := check(context.Background(), r); err != nil || why != "" {
+				t.Errorf("close: %q %v", why, err)
+			}
+		}()
+	}
+	wg.Wait()
+	if n := chainReads.Load(); n != 1 {
 		t.Fatalf("eth_chainId read %d times, want once", n)
 	}
 }

@@ -70,18 +70,19 @@ func inventoryCheck(reader *maker.Reader, makerOf func() common.Address,
 			log.Warn("close not checked", "rfq", r.ID, "err", err)
 			return "", err
 		}
+		// the lock is held through the first eth_chainId, so concurrent closes wait for one read instead of each
+		// sending their own; a failed read is retried by the next close
 		mu.Lock()
-		id := rpcChain
-		mu.Unlock()
-		if id == 0 {
+		if rpcChain == 0 {
 			got, err := reader.ChainID(ctx)
 			if err != nil {
+				mu.Unlock()
 				return "", err
 			}
-			mu.Lock()
-			rpcChain, id = got, got
-			mu.Unlock()
+			rpcChain = got
 		}
+		id := rpcChain
+		mu.Unlock()
 		if r.ChainID != id {
 			err := fmt.Errorf("request is on chain %d, the RPC on chain %d", r.ChainID, id)
 			log.Warn("close not checked", "rfq", r.ID, "err", err)
