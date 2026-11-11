@@ -120,6 +120,10 @@ capped at 1 % of the notional**. Both are read from the chain and arrive in the 
 | `0` MakerBuys (taker writes, you buy the long) | you pay `premium + fee` |
 | `1` MakerSells (you sell a long you hold) | you receive `premium − fee` |
 
+Quoting a close (a side-1 request on a series you hold) is optional: Hedgehood tells users that an early exit depends on
+a maker quoting one. A close unwinds the user's short, so you can only quote what you hold, and the gateway checks
+that (`inventory`).
+
 Example: 10 TSLA puts at strike 220, premium 300 USDG: 12.5 % would be 37.5, the cap is 1 % × 2 200 = 22, so the fee
 is 22 USDG.
 
