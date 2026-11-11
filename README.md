@@ -6,17 +6,26 @@ request is a short sealed-bid auction on Hedgehood's RFQ gateway; the best quote
 through `RfqSettler`. The gateway never holds your funds or keys and cannot change a quote. There is no last look.
 
 > **Testnet only** (Robinhood Chain testnet, chainId 46630). The contracts (`OptionsCore`, `RfqSettler`) are not yet
-> audited; mainnet addresses follow the launch. Nothing in this repository is a security review.
+> audited; mainnet addresses follow the launch. Nothing in these repositories is a security review.
 
-| | Path | Package | Example |
+Each language lives in its own repository:
+
+| | Repository | Package | Install |
 |---|---|---|---|
-| Python | [`src/hedgehood_maker`](src/hedgehood_maker) | `hedgehood-maker` | [`examples/simple_maker.py`](examples/simple_maker.py), [`examples/onboard.py`](examples/onboard.py) |
-| TypeScript | [`ts/`](ts) | `@hedgehood/maker` | [`ts/examples/simple-maker.ts`](ts/examples/simple-maker.ts) |
-| Go | [`go/maker`](go/maker) | `github.com/0xHedgeHood/sdks/go/maker` | [`go/examples/simple-maker`](go/examples/simple-maker) |
-| CLI (Go) | [`go/cmd/hedgehood-maker`](go/cmd/hedgehood-maker) | `hedgehood-maker` | `hedgehood-maker connect --bps 40` |
+| Python | [hedgehood-maker-py](https://github.com/0xHedgeHood/hedgehood-maker-py) | `hedgehood-maker` | `pip install "git+https://github.com/0xHedgeHood/hedgehood-maker-py"` |
+| TypeScript | [hedgehood-maker-ts](https://github.com/0xHedgeHood/hedgehood-maker-ts) | `@hedgehood/maker` | `npm install github:0xHedgeHood/hedgehood-maker-ts` |
+| Go | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go) | `github.com/0xHedgeHood/hedgehood-maker-go/maker` | `go get github.com/0xHedgeHood/hedgehood-maker-go/maker` |
+| CLI (Go) | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go/tree/main/cmd/hedgehood-maker) | `hedgehood-maker` | `go install github.com/0xHedgeHood/hedgehood-maker-go/cmd/hedgehood-maker@latest` |
 
-All three clients do the same things, checked against the same test vectors (quote digests byte-equal to
-`RfqSettler.quoteDigest`):
+This repository holds what they share:
+
+- [docs/MAKER_GUIDE.md](docs/MAKER_GUIDE.md): the maker guide (going live, funding, fees, timing, scorecard, wire
+  format).
+- [vectors/goldens.json](vectors/goldens.json): the golden vectors for the quote encoding (digest, signature, series
+  id, calldata hashes, type strings, selectors). Each SDK's CI checks this repository out and recomputes them, as do
+  the Solidity tests, the gateway and our desk. A change to the encoding starts here.
+
+All three clients do the same things:
 
 - **Connect and quote**: log in to the gateway, receive each request, call your pricer within the 2-second window,
   build and sign the quote (fresh nonce, current epoch, all-or-nothing), check it the way the gateway will, reconnect
@@ -24,11 +33,8 @@ All three clients do the same things, checked against the same test vectors (quo
 - **Set up on chain**: build the unsigned transactions a maker needs (`setSigner`, `approve`, `deposit`, `withdraw`,
   `increaseEpoch`, `invalidateNonces`, `linkMaker`, `OptionsCore.setOperator`, `redeemLong`). The SDKs never sign or
   send a transaction; you review and send each one.
-- **Read the chain**: epoch, signer delegation, balances, allowances, fees, and `canSell` / `CanSell`, which tells
-  you whether you hold a long before quoting an early close.
-
-The full maker guide (going live, funding, fees, timing, scorecard, wire format) is
-[docs/MAKER_GUIDE.md](docs/MAKER_GUIDE.md).
+- **Read the chain**: epoch, signer delegation, balances, allowances, fees, and `can_sell` / `canSell` / `CanSell`,
+  which tells you whether you hold a long before quoting an early close.
 
 ## How a maker goes live
 
@@ -55,69 +61,11 @@ increases are announced on chain and apply 24 hours later; decreases apply at on
 | Quote token (test USDG, 6 decimals) | `0x850DE815d41F6983Aaf09247f9a465c0aefff04C` |
 | Scorecard | `https://testnet-rfq.hedgehood.io/v1/makers` |
 
-## Python
+## History
 
-```
-pip install "git+https://github.com/0xHedgeHood/sdks"      # or: pip install -e ".[dev]" from a checkout
-```
-
-Python 3.10+, dependencies `eth-account` and `websockets`.
-
-1. Print the setup transactions, review them and send them yourself:
-
-   ```
-   python examples/onboard.py --maker 0xYourMaker --signer 0xYourHotKey --signer-days 7 --deposit 1000 --rpc
-   ```
-
-2. Quote:
-
-   ```python
-   import asyncio, os
-   from hedgehood_maker import MAKER_BUYS, RFQ, TESTNET, Decline, MakerClient
-   from hedgehood_maker.fees import notional
-
-   def price(rfq: RFQ):
-       if rfq.side != MAKER_BUYS:
-           return Decline("no_inventory")             # closes: see examples/simple_maker.py --sell
-       return notional(rfq.amount, rfq.series.strike) * 40 // 10_000   # premium, USDG raw, fee excluded
-
-   client = MakerClient(
-       TESTNET.gateway_ws,
-       os.environ["HEDGEHOOD_SIGNER_KEY"],              # the maker key or its delegated hot key
-       price,
-       maker="0xYourMaker",                             # omit when the key is the maker itself
-       chain_id=TESTNET.chain_id, settler=TESTNET.settler,
-       on_event=lambda f: print(f.type, f.raw),         # won, lost, fill, rejected, ...
-   )
-   asyncio.run(client.run())
-   ```
-
-   The pricer may be sync (run in a thread) or async. It returns a premium (int), a `Quote` from
-   `client.build_quote(...)`, or a decline. `examples/simple_maker.py` is fuller: Black-Scholes or fixed bps,
-   fee-aware, and with `--sell` it quotes early closes only for longs it holds:
-
-   ```
-   export HEDGEHOOD_SIGNER_KEY=...
-   python examples/simple_maker.py --mode vol --vol 0.6 --spot TSLA=390 --edge 0.05 --sell --external self
-   ```
-
-## TypeScript and Go
-
-See [ts/README.md](ts/README.md) and [go/README.md](go/README.md). The CLI in one line:
-
-```
-cd go && go run ./cmd/hedgehood-maker connect --maker 0xYourMaker --bps 40 --sides both
-```
-
-## Development
-
-```
-pip install -e ".[dev]" && ruff check . && pytest                       # Python, offline
-cd ts && npm ci && npm run typecheck && npm run lint && npm test        # TypeScript, offline
-cd go && go vet ./... && go test -race ./...                            # Go and the CLI, offline
-```
-
-Each suite also has an opt-in, read-only test against the testnet RPC (`HEDGEHOOD_LIVE_RPC`).
+Until 2026-11-11 the three SDKs lived here together (Python at the root, `ts/`, `go/`, module path
+`github.com/0xHedgeHood/sdks/go`). They moved to their own repositories from commit `4d03dda`; this repository's
+history keeps the earlier work.
 
 ## License
 
