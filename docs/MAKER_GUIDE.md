@@ -115,6 +115,13 @@ The settler charges the **maker**, per fill, `fee = min(premium × feeBps, amoun
 capped at 1 % of the notional**. Both are read from the chain and arrive in the gateway's `ready` frame
 (`client.session.fee_bps`, `client.session.notional_fee_bps`).
 
+**Fee changes are announced a day ahead.** A decrease (a lower `feeBps`, a new or tighter cap) applies at once. An
+increase (a higher `feeBps`, a looser or removed cap) is scheduled on chain and applies 24 hours later
+(`FEE_INCREASE_DELAY`), so a quote you signed never fills under a fee you could not see. Watch the settler's
+`FeeIncreaseScheduled(feeBps, notionalFeeBps, effectiveAt)` event or read `pendingFees()`. The `ready` frame carries the
+fees in effect at login: a bot that stays connected past `effectiveAt` re-reads `feeBps()` and `notionalFeeBps()`, or
+reconnects.
+
 | Side | You pay / receive |
 |---|---|
 | `0` MakerBuys (taker writes, you buy the long) | you pay `premium + fee` |
