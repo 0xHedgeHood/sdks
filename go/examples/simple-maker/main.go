@@ -12,6 +12,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"log/slog"
 	"math/big"
@@ -76,14 +77,18 @@ func main() {
 	}
 	cfg.Maker = crypto.PubkeyToAddress(key.PublicKey)
 	if *makerFlag != "" {
-		cfg.Maker = common.HexToAddress(*makerFlag)
+		if cfg.Maker, err = parseAddress(*makerFlag, "-maker"); err != nil {
+			log.Fatal(err)
+		}
 	}
 	switch *external {
 	case "":
 	case "self":
 		cfg.ExternalAccount = cfg.Maker
 	default:
-		cfg.ExternalAccount = common.HexToAddress(*external)
+		if cfg.ExternalAccount, err = parseAddress(*external, "-external"); err != nil {
+			log.Fatal(err)
+		}
 	}
 	if c, err = maker.NewClient(cfg); err != nil {
 		log.Fatal(err)
@@ -94,4 +99,17 @@ func main() {
 	if err := c.Run(ctx); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// parseAddress accepts exactly a 20-byte hex address. common.HexToAddress alone would turn a typo into some other
+// address (it pads or truncates), and the quotes would name that account as the payer.
+func parseAddress(s, name string) (common.Address, error) {
+	if !common.IsHexAddress(s) {
+		return common.Address{}, fmt.Errorf("%s: not a 20-byte hex address: %q", name, s)
+	}
+	a := common.HexToAddress(s)
+	if a == (common.Address{}) {
+		return common.Address{}, fmt.Errorf("%s: the zero address", name)
+	}
+	return a, nil
 }

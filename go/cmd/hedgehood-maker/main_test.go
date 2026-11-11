@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
@@ -302,5 +303,48 @@ func TestDemoPricer(t *testing.T) {
 	}
 	if a, _ := demoPricer(nil, 40, "sell", nil, nil)(ctx, sell); a.Decline != "no_inventory" {
 		t.Fatalf("no reader: %v", a)
+	}
+}
+
+// With --no-pin the gateway may announce another deployment: a close is checked only against the configured one.
+func TestInventoryCheckReadsOnlyTheRequestsDeployment(t *testing.T) {
+	settler := common.HexToAddress(tMaker)
+	var calls []string
+	reader := &maker.Reader{Settler: settler, Core: common.HexToAddress(tHot),
+		Transport: func(_ context.Context, method string, params []any) (json.RawMessage, error) {
+			calls = append(calls, method)
+			if method == "eth_chainId" {
+				return json.RawMessage(`"0xb626"`), nil // 46630
+			}
+			word := `"0x` + strings.Repeat("0", 63) + `1"` // balanceOf = 1 wei, isOperator = true
+			return json.RawMessage(word), nil
+		}}
+	check := inventoryCheck(reader, func() common.Address { return settler },
+		slog.New(slog.NewTextHandler(io.Discard, nil)))
+	r := maker.RFQ{ChainID: 46630, Settler: settler, Side: maker.MakerSells, Amount: maker.Dec{Int: big.NewInt(1)},
+		Series: maker.Series{Strike: big.NewInt(1)}}
+	ctx := context.Background()
+
+	if why, err := check(ctx, r); err != nil || why != "" {
+		t.Fatalf("same deployment: %q %v", why, err)
+	}
+	other := r
+	other.Settler = common.HexToAddress(tHot)
+	if _, err := check(ctx, other); err == nil {
+		t.Fatal("another settler was checked")
+	}
+	other = r
+	other.ChainID = 1
+	if _, err := check(ctx, other); err == nil {
+		t.Fatal("another chain was checked")
+	}
+	n := 0
+	for _, m := range calls {
+		if m == "eth_chainId" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("eth_chainId read %d times, want once", n)
 	}
 }
