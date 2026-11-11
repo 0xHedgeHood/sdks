@@ -56,6 +56,42 @@ func demoPricer(perToken *big.Int, bps int64, sides string, maxAmount *big.Int,
 	}
 }
 
+// inventoryCheck is Reader.CanSell for a close, read only from the deployment the request is for. The reader is the
+// configured --network/--rpc/--settler/--core; with --no-pin the gateway may announce another chain or settler, and a
+// balance read elsewhere would say nothing about this request. A request whose settler is not the reader's, or whose
+// chain is not the RPC's (eth_chainId, read once), is an error: the pricer declines it as unavailable.
+func inventoryCheck(reader *maker.Reader, makerOf func() common.Address,
+	log *slog.Logger) func(context.Context, maker.RFQ) (string, error) {
+	var mu sync.Mutex
+	var rpcChain uint64
+	return func(ctx context.Context, r maker.RFQ) (string, error) {
+		if r.Settler != reader.Settler {
+			err := fmt.Errorf("request settler %s is not the configured settler %s", r.Settler.Hex(), reader.Settler.Hex())
+			log.Warn("close not checked", "rfq", r.ID, "err", err)
+			return "", err
+		}
+		// the lock is held through the first eth_chainId, so concurrent closes wait for one read instead of each
+		// sending their own; a failed read is retried by the next close
+		mu.Lock()
+		if rpcChain == 0 {
+			got, err := reader.ChainID(ctx)
+			if err != nil {
+				mu.Unlock()
+				return "", err
+			}
+			rpcChain = got
+		}
+		id := rpcChain
+		mu.Unlock()
+		if r.ChainID != id {
+			err := fmt.Errorf("request is on chain %d, the RPC on chain %d", r.ChainID, id)
+			log.Warn("close not checked", "rfq", r.ID, "err", err)
+			return "", err
+		}
+		return reader.CanSell(ctx, makerOf(), r.Series, r.Amount.Int)
+	}
+}
+
 func cmdConnect(e env, args []string) error {
 	fs := flag.NewFlagSet("connect", flag.ContinueOnError)
 	var n netFlags
@@ -70,7 +106,8 @@ func cmdConnect(e env, args []string) error {
 	sides := fs.String("sides", "buy", "sides to quote: buy (MakerBuys), sell (MakerSells, needs longs), both")
 	maxAmount := fs.String("max-amount", "", "decline requests above this many underlying tokens")
 	life := fs.Duration("life", 60*time.Second, "quote validity (capped at 115 s)")
-	noPin := fs.Bool("no-pin", false, "accept whatever chain and settler the gateway announces")
+	noPin := fs.Bool("no-pin", false, "accept whatever chain and settler the gateway announces (closes are still "+
+		"quoted only on the configured --rpc chain and --settler)")
 	duration := fs.Duration("duration", 0, "stop after this long (0 = until interrupted)")
 	verbose := fs.Bool("v", false, "debug logging")
 	if err := parse(fs, args, e.stderr); err != nil {
@@ -121,10 +158,7 @@ func cmdConnect(e env, args []string) error {
 	var c *maker.Client
 	var canSell func(context.Context, maker.RFQ) (string, error)
 	if *sides != "buy" { // closes: quote only what the maker holds (the gateway rejects the rest as inventory)
-		reader := maker.NewReader(net, "")
-		canSell = func(ctx context.Context, r maker.RFQ) (string, error) {
-			return reader.CanSell(ctx, c.Maker(), r.Series, r.Amount.Int)
-		}
+		canSell = inventoryCheck(maker.NewReader(net, ""), func() common.Address { return c.Maker() }, log)
 	}
 	cfg := maker.Config{URL: url, Signer: key, Maker: makerAddr, QuoteLife: *life,
 		Pricer: demoPricer(perToken, *bps, *sides, maxRaw, canSell), Logger: log,
