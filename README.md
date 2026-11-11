@@ -8,14 +8,14 @@ through `RfqSettler`. The gateway never holds your funds or keys and cannot chan
 > **Testnet only** (Robinhood Chain testnet, chainId 46630). The contracts (`OptionsCore`, `RfqSettler`) are not yet
 > audited; mainnet addresses follow the launch. Nothing in these repositories is a security review.
 
-Each language lives in its own repository:
+Each language lives in its own repository; 0.1.0 is on [PyPI](https://pypi.org/project/hedgehood-maker/), [npm](https://www.npmjs.com/package/@hedgehood-io/maker) and the Go module proxy:
 
 | | Repository | Package | Install |
 |---|---|---|---|
-| Python | [hedgehood-maker-py](https://github.com/0xHedgeHood/hedgehood-maker-py) | `hedgehood-maker` | `pip install "git+https://github.com/0xHedgeHood/hedgehood-maker-py"` |
-| TypeScript | [hedgehood-maker-ts](https://github.com/0xHedgeHood/hedgehood-maker-ts) | `@hedgehood/maker` | `npm install github:0xHedgeHood/hedgehood-maker-ts` |
-| Go | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go) | `github.com/0xHedgeHood/hedgehood-maker-go/maker` | `go get github.com/0xHedgeHood/hedgehood-maker-go/maker` |
-| CLI (Go) | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go/tree/main/cmd/hedgehood-maker) | `hedgehood-maker` | `go install github.com/0xHedgeHood/hedgehood-maker-go/cmd/hedgehood-maker@latest` |
+| Python | [hedgehood-maker-py](https://github.com/0xHedgeHood/hedgehood-maker-py) | `hedgehood-maker` | `pip install hedgehood-maker` |
+| TypeScript | [hedgehood-maker-ts](https://github.com/0xHedgeHood/hedgehood-maker-ts) | `@hedgehood-io/maker` | `npm install @hedgehood-io/maker` |
+| Go | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go) | `github.com/0xHedgeHood/hedgehood-maker-go/maker` | `go get github.com/0xHedgeHood/hedgehood-maker-go/maker@v0.1.0` |
+| CLI (Go) | [hedgehood-maker-go](https://github.com/0xHedgeHood/hedgehood-maker-go/tree/main/cmd/hedgehood-maker) | `hedgehood-maker` | `go install github.com/0xHedgeHood/hedgehood-maker-go/cmd/hedgehood-maker@v0.1.0` |
 
 This repository holds what they share:
 
