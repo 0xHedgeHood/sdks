@@ -1,0 +1,4 @@
+/hedgehood-maker
+/cmd/hedgehood-maker/hedgehood-maker
+*.test
+*.out
