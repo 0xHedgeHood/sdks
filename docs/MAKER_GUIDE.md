@@ -18,10 +18,35 @@ taker ── RfqSettler.fill / close ──► chain ── Filled ──► gat
 
 This guide covers what a maker needs; the wire format is in [Protocol reference](#protocol-reference).
 
-## Onboarding checklist
+## Going live
 
-1. **Ask to be allowlisted.** Send the Hedgehood team your **maker address** (the account whose funds and longs move).
-   The gateway refuses any login from an address that is not on its allowlist.
+Every maker goes through the same four stages. Mainnet access follows a clean testnet run, never the other way round.
+
+| Stage | What happens | Done when |
+|---|---|---|
+| 1. Intro call | You share your maker address(es), the underlyings you want to quote, expected sizes and a contact. We allowlist you on the **testnet** gateway and agree your initial mainnet limits. | You are on the testnet allowlist |
+| 2. Testnet setup | The [checklist below](#testnet-checklist): signer, funding, operator approval, a connected bot. | Your bot logs in and answers requests |
+| 3. Testnet run | Your bot stays connected for **2 days (48 h)**, across at least one US regular session. We send takers against you. | No breaker pause; every request answered (quote or decline) before `respondBy`; at least **3 opens** (MakerBuys) and **2 early closes** (MakerSells) filled; one position held to expiry and paid out (and, on a physical series, exercised) |
+| 4. Mainnet | We review your testnet scorecard (`GET /v1/makers`) with you and add your mainnet address to the mainnet allowlist with the agreed limits. Mainnet funding and signer setup repeat stage 2 on mainnet. | Your first mainnet fill |
+
+Questions during any stage go to the Hedgehood team contact you got at the intro call.
+
+## After expiry
+
+- **Cash payouts are pushed to you.** Hedgehood's expiry keeper settles every expired series and then calls
+  `OptionsCore.redeemLong` for each holder's whole balance (anyone may push a whole balance home), so your USDG or
+  underlying arrives without a transaction from you. You can still redeem yourself at any time after settlement.
+- **Physical series.** An in-the-money long may `OptionsCore.exercise` for delivery during the **1-day window** after
+  settlement: call `exercise(series, amount, maker, receiver)` from the maker, or from an account the maker authorized
+  with `OptionsCore.setAuthorization`. **The caller pays** (the strike in USDG for a call, the shares for a put) and
+  must approve the kernel for it first; `receiver` gets the shares or the USDG. What is not exercised in the window is paid in cash like a cash series.
+- **No early exercise.** Options are European; a long you no longer want can be sold back to a taker only through a
+  MakerSells quote (an early close).
+
+## Testnet checklist
+
+1. **Be allowlisted** (stage 1 above) for your **maker address**: the account whose funds and longs move. The
+   gateway refuses any login from an address that is not on its allowlist.
 2. **Delegate a hot signer** (recommended). From the maker, call `RfqSettler.setSigner(hotKey, expiresAt)`. The hot key
    can then log in and sign quotes for the maker. A quote only counts while `expiresAt > validUntil`, so rotate keys
    before they expire; `setSigner(key, 0)` revokes one. A hot signer has the maker's full authority over its settler
@@ -90,10 +115,21 @@ The settler charges the **maker**, per fill, `fee = min(premium × feeBps, amoun
 capped at 1 % of the notional**. Both are read from the chain and arrive in the gateway's `ready` frame
 (`client.session.fee_bps`, `client.session.notional_fee_bps`).
 
+**Fee changes are announced a day ahead.** A decrease (a lower `feeBps`, a new or tighter cap) applies at once. An
+increase (a higher `feeBps`, a looser or removed cap) is scheduled on chain and applies 24 hours later
+(`FEE_INCREASE_DELAY`), so a quote you signed never fills under a fee you could not see. Watch the settler's
+`FeeIncreaseScheduled(feeBps, notionalFeeBps, effectiveAt)` event or read `pendingFees()`. The `ready` frame carries the
+fees in effect at login: a bot that stays connected past `effectiveAt` re-reads `feeBps()` and `notionalFeeBps()`, or
+reconnects.
+
 | Side | You pay / receive |
 |---|---|
 | `0` MakerBuys (taker writes, you buy the long) | you pay `premium + fee` |
 | `1` MakerSells (you sell a long you hold) | you receive `premium − fee` |
+
+Quoting a close (a side-1 request on a series you hold) is optional: Hedgehood tells users that an early exit depends on
+a maker quoting one. A close unwinds the user's short, so you can only quote what you hold, and the gateway checks
+that (`inventory`).
 
 Example: 10 TSLA puts at strike 220, premium 300 USDG: 12.5 % would be 37.5, the cap is 1 % × 2 200 = 22, so the fee
 is 22 USDG.
