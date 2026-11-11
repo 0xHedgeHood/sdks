@@ -114,3 +114,29 @@ def test_reader_decodes_settler_state():
     assert all(p["method"] in ("eth_call", "eth_chainId") for p in rpc.requests)  # reads only
     with pytest.raises(RPCError):
         r.nonce_used(MAKER, 1)
+
+
+def test_can_sell_needs_the_long_and_the_operator():
+    from hedgehood_maker.eip712 import series_id
+    series = G.QUOTE.series
+    held = {"value": 2 * 10**18}
+    operator = {"value": True}
+
+    class Rpc(FakeRPC):
+        def __call__(self, payload):
+            sel = payload["params"][0]["data"][2:10] if payload["method"] == "eth_call" else ""
+            if sel == S.selector(S.LONG_BALANCE).hex():
+                self.requests.append(payload)
+                return {"result": "0x" + encode(["uint256"], [held["value"]]).hex()}
+            if sel == S.selector(S.IS_OPERATOR).hex():
+                return {"result": "0x" + encode(["bool"], [operator["value"]]).hex()}
+            return super().__call__(payload)
+
+    rpc = Rpc({})
+    r = Reader.for_network(TESTNET, transport=rpc)
+    assert r.can_sell(MAKER, series, 2 * 10**18) is None
+    data = rpc.requests[-1]["params"][0]["data"]
+    assert data == S.calldata(S.LONG_BALANCE, MAKER, series_id(series))
+    assert "holds" in r.can_sell(MAKER, series, 3 * 10**18)
+    operator["value"] = False
+    assert "operator" in r.can_sell(MAKER, series, 10**18)

@@ -20,7 +20,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/0xHedgeHood/hedgehood-maker-sdk/go/maker"
+	"github.com/0xHedgeHood/sdks/go/maker"
 )
 
 const usage = `hedgehood-maker %s -- Hedgehood options RFQ maker tool (TESTNET ONLY, contracts not audited)

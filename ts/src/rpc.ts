@@ -4,7 +4,7 @@
  */
 
 import { type Address, createPublicClient, decodeAbiParameters, type Hex, http, type PublicClient } from "viem";
-import { quoteValues, seriesValues } from "./eip712.js";
+import { quoteValues, seriesId, seriesValues } from "./eip712.js";
 import { address, type Quote, type Series, ValidationError } from "./models.js";
 import type { Network } from "./networks.js";
 import * as S from "./settler.js";
@@ -146,6 +146,18 @@ export class Reader {
 
   longBalance(owner: string, seriesId: bigint): Promise<bigint> {
     return this.one(this.requireCore(), S.LONG_BALANCE, [address(owner, "owner"), seriesId], "uint256");
+  }
+
+  /**
+   * Why the settler could not deliver `amount` of `series` from `maker` (null: it can). The gateway rejects a close
+   * quote it cannot fill (`inventory`): check before quoting one. The settler moves the long as the maker's
+   * OptionsCore operator (`setOperator`, the SDK's setup path).
+   */
+  async canSell(maker: string, series: Series, amount: bigint): Promise<string | null> {
+    const held = await this.longBalance(maker, seriesId(series));
+    if (held < amount) return `holds ${held} of ${amount}`;
+    if (!(await this.isOperator(maker))) return "the settler is not the maker's operator on OptionsCore (setOperator)";
+    return null;
   }
 
   tokenBalance(token: string, account: string): Promise<bigint> {

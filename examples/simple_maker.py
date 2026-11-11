@@ -1,6 +1,7 @@
 """A minimal maker: quotes every listed TESTNET request at a fixed volatility (Black-Scholes on a spot you pass) or at a
 fixed premium in basis points of the notional. A starting point, not a pricing model: no spot feed, no hedging, no
-inventory limits beyond --max-amount.
+inventory limits beyond --max-amount. With --sell it also quotes early closes, but only for series it holds (it reads
+its longs on chain first; the gateway would reject the rest as `inventory`).
 
     export HEDGEHOOD_SIGNER_KEY=...           # the maker key, or a hot key the maker delegated with setSigner
     python examples/simple_maker.py --maker 0xYourMaker --mode vol --vol 0.6 --spot TSLA=330 --edge 0.05
@@ -48,6 +49,7 @@ class Pricer:
         self.spots = dict(s.split("=") for s in args.spot)
         self.listed = {(u.token, u.oracle): name for name, u in TESTNET.underlyings.items()}
         self.client: MakerClient | None = None
+        self.reader: Reader | None = None
 
     def __call__(self, rfq: RFQ) -> int | Decline:
         a, s = self.args, rfq.series
@@ -56,8 +58,16 @@ class Pricer:
             return Decline("unlisted")
         if rfq.amount > int(a.max_amount * SHARE):
             return Decline("too_large")
-        if rfq.side != MAKER_BUYS and not a.sell:
-            return Decline("no_inventory")
+        if rfq.side != MAKER_BUYS:
+            if not a.sell:
+                return Decline("no_inventory")
+            try:
+                why = self.reader.can_sell(self.client.maker, s, rfq.amount)
+            except Exception:  # noqa: BLE001 - no read, no quote
+                return Decline("unavailable")
+            if why:
+                logging.info("close %s declined: %s", rfq.rfq_id, why)
+                return Decline("no_inventory")
         if a.mode == "bps":
             theo = notional(rfq.amount, s.strike) * a.bps // 10_000  # quote raw
         else:
@@ -99,16 +109,16 @@ def main() -> int:
     if not key:
         sys.exit("set HEDGEHOOD_SIGNER_KEY or pass --key-file")
     pricer = Pricer(args)
-    reader = Reader.for_network(TESTNET) if args.check_rpc else None
+    reader = Reader.for_network(TESTNET) if args.check_rpc or args.sell else None
     client = MakerClient(
         args.gateway, key, pricer, maker=args.maker, quote_life=args.life,
         chain_id=TESTNET.chain_id, settler=TESTNET.settler,
-        epoch_reader=(lambda m: asyncio.to_thread(reader.epoch, m)) if reader else None,
+        epoch_reader=(lambda m: asyncio.to_thread(reader.epoch, m)) if args.check_rpc else None,
         on_event=lambda f: logging.info("%s %s", f.type, f.raw) if f.type in ("won", "fill", "rejected") else None,
     )
     if args.external:  # pay / receive premiums in a wallet by allowance instead of the settler balance
         client.external_account = to_checksum_address(client.maker if args.external == "self" else args.external)
-    pricer.client = client
+    pricer.client, pricer.reader = client, reader
     try:
         asyncio.run(client.run())
     except KeyboardInterrupt:

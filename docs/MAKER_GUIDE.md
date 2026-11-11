@@ -5,8 +5,7 @@
 
 Hedgehood's RFQ gateway runs a short sealed-bid auction for every taker request on the options core. Makers answer
 over a WebSocket with **firm EIP-712 quotes they sign themselves**; the gateway checks each quote, returns the best one
-to the taker, and the taker (or the gateway's relayer, with the taker's signed consent) fills it on chain through
-`RfqSettler`. The gateway never holds your funds or keys and cannot change a quote. There is no last look: a quote is
+to the taker, and the taker fills it on chain through `RfqSettler` from its own wallet. The gateway never holds your funds or keys and cannot change a quote. There is no last look: a quote is
 firm until its `validUntil`, until its nonce is used, or until you change your epoch.
 
 ```
@@ -138,8 +137,8 @@ is 22 USDG.
 `fees.premium_for_net(side, net, amount, strike, fee_bps, notional_fee_bps)`: the largest premium whose premium + fee
 fits your budget (buys), or the smallest premium that leaves you `net` after the fee (sells).
 
-When the gateway relays a fill for a gasless taker, its gas fee (**0.02 USDG** on testnet) is paid by the **taker**: out
-of the premium the taker receives on an open, on top of the premium it pays on a close. It never changes your side.
+Takers send their fills themselves and pay gas in ETH; Hedgehood's gateways do not relay fills. Nothing about gas
+changes your side of a trade.
 
 ## Protocol reference
 

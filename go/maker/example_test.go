@@ -8,7 +8,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 
-	"github.com/0xHedgeHood/hedgehood-maker-sdk/go/maker"
+	"github.com/0xHedgeHood/sdks/go/maker"
 )
 
 // A maker that buys at 40 bps of the notional and declines everything else (the README's example).

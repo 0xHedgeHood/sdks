@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"math/big"
 	"net/http"
@@ -17,7 +18,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 
-	"github.com/0xHedgeHood/hedgehood-maker-sdk/go/maker"
+	"github.com/0xHedgeHood/sdks/go/maker"
 )
 
 // The CLI against fakes: a JSON-RPC server answering eth_call by selector, and an unreachable gateway. Keys are
@@ -267,23 +268,39 @@ func TestDemoPricer(t *testing.T) {
 	r := maker.RFQ{Side: maker.MakerBuys, Amount: maker.Dec{Int: new(big.Int).Mul(big.NewInt(2), maker.Share)},
 		Series: maker.Series{Strike: big.NewInt(330_000_000)}}
 	ctx := context.Background()
-	a, _ := demoPricer(big.NewInt(1_250_000), 0, "buy", nil)(ctx, r)
+	a, _ := demoPricer(big.NewInt(1_250_000), 0, "buy", nil, nil)(ctx, r)
 	if a.Premium.Int64() != 2_500_000 {
 		t.Fatalf("per token: %v", a)
 	}
-	a, _ = demoPricer(nil, 40, "both", nil)(ctx, r)
+	a, _ = demoPricer(nil, 40, "both", nil, nil)(ctx, r)
 	if a.Premium.Int64() != 2_640_000 { // 2 x 330 USDG x 0.4 %
 		t.Fatalf("bps: %v", a)
 	}
 	sell := r
 	sell.Side = maker.MakerSells
-	if a, _ := demoPricer(nil, 40, "buy", nil)(ctx, sell); a.Decline != "no_inventory" {
+	if a, _ := demoPricer(nil, 40, "buy", nil, nil)(ctx, sell); a.Decline != "no_inventory" {
 		t.Fatalf("sell on a buy-only maker: %v", a)
 	}
-	if a, _ := demoPricer(nil, 40, "sell", nil)(ctx, r); a.Decline != "side_not_quoted" {
+	if a, _ := demoPricer(nil, 40, "sell", nil, nil)(ctx, r); a.Decline != "side_not_quoted" {
 		t.Fatalf("buy on a sell-only maker: %v", a)
 	}
-	if a, _ := demoPricer(nil, 40, "both", maker.Share)(ctx, r); a.Decline != "too_big" {
+	if a, _ := demoPricer(nil, 40, "both", maker.Share, nil)(ctx, r); a.Decline != "too_big" {
 		t.Fatalf("max amount: %v", a)
+	}
+	// closes: only what the maker holds
+	holds := func(why string, err error) func(context.Context, maker.RFQ) (string, error) {
+		return func(context.Context, maker.RFQ) (string, error) { return why, err }
+	}
+	if a, _ := demoPricer(nil, 40, "both", nil, holds("", nil))(ctx, sell); a.Premium == nil || a.Premium.Sign() <= 0 {
+		t.Fatalf("held long: %v", a)
+	}
+	if a, _ := demoPricer(nil, 40, "both", nil, holds("holds 0 of 2", nil))(ctx, sell); a.Decline != "no_inventory" {
+		t.Fatalf("no long: %v", a)
+	}
+	if a, _ := demoPricer(nil, 40, "both", nil, holds("", errors.New("rpc down")))(ctx, sell); a.Decline != "unavailable" {
+		t.Fatalf("rpc down: %v", a)
+	}
+	if a, _ := demoPricer(nil, 40, "sell", nil, nil)(ctx, sell); a.Decline != "no_inventory" {
+		t.Fatalf("no reader: %v", a)
 	}
 }

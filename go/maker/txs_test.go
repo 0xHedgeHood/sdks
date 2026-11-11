@@ -12,6 +12,7 @@ import (
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
+	"github.com/ethereum/go-ethereum/crypto"
 )
 
 var (
@@ -218,5 +219,28 @@ func TestReaderDecodesSettlerState(t *testing.T) {
 	}
 	if _, err := (&Reader{Settler: Testnet.Settler, Transport: f.transport}).LongBalance(ctx, tMaker, big.NewInt(1)); err == nil {
 		t.Fatal("no core")
+	}
+}
+
+func TestCanSell(t *testing.T) {
+	long, op := hex.EncodeToString(crypto.Keccak256([]byte("balanceOf(address,uint256)"))[:4]),
+		hex.EncodeToString(crypto.Keccak256([]byte("isOperator(address,address)"))[:4])
+	f := &fakeRPC{answers: map[string]string{long: w32(2e18), op: w32(1)}}
+	r := &Reader{Settler: Testnet.Settler, Core: Testnet.Core, Transport: f.transport}
+	ctx := context.Background()
+	s := goldenQuote().Series
+	if why, err := r.CanSell(ctx, tMaker, s, e18(2)); err != nil || why != "" {
+		t.Fatalf("held: %q %v", why, err)
+	}
+	want, _ := Pack("core.balanceOf", tMaker, SeriesID(s))
+	if f.calls[0]["to"] != Testnet.Core || f.calls[0]["data"] != hexutil.Encode(want) {
+		t.Fatalf("balanceOf call %v", f.calls[0])
+	}
+	if why, _ := r.CanSell(ctx, tMaker, s, e18(3)); !strings.HasPrefix(why, "holds") {
+		t.Fatalf("short: %q", why)
+	}
+	f.answers[op] = w32(0)
+	if why, _ := r.CanSell(ctx, tMaker, s, e18(1)); !strings.Contains(why, "operator") {
+		t.Fatalf("no operator: %q", why)
 	}
 }

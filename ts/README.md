@@ -18,7 +18,7 @@ sign firm EIP-712 quotes for the `RfqSettler`, answer the gateway's requests ove
   prints the `cast send` equivalent).
 - `feeOf`, `previewFill`, `premiumForNet`: the settler's fee math in bigints.
 - `Reader`: read-only `eth_call`s through a viem client (epoch, signer expiry, balances, allowances, fees,
-  `quoteDigest`).
+  `quoteDigest`, `canSell`).
 
 Node ≥ 20, ESM. Dependencies: `viem`, `ws`. Every on-chain integer is a `bigint`.
 
@@ -28,7 +28,7 @@ From a checkout (the package is not published to npm):
 
 ```
 cd ts && npm ci && npm run build
-npm install /path/to/hedgehood-maker-sdk/ts      # in your project
+npm install /path/to/sdks/ts      # in your project
 ```
 
 ## Quickstart
@@ -72,7 +72,12 @@ The pricer returns a premium (`bigint`), a quote from `client.buildQuote(rfq, pr
 or a decline. It runs on the event loop: keep it async or quick; past its budget the client declines with `timeout`
 and aborts `signal`.
 
-A fuller example (fixed volatility or fixed bps, fee-aware): [examples/simple-maker.ts](examples/simple-maker.ts).
+Before quoting an early close (a MakerSells request), check you hold the long: `reader.canSell(maker, rfq.series,
+rfq.amount)` resolves to why the settler could not deliver it (null when it can); the gateway rejects anything else as
+`inventory`.
+
+A fuller example (fixed volatility or fixed bps, fee-aware, `--sell` quotes closes only for longs it holds):
+[examples/simple-maker.ts](examples/simple-maker.ts).
 Run it with `npm run build && node examples/simple-maker.ts --mode bps --bps 50` (flags in its header; Node ≥ 22.18
 runs `.ts` directly, Node 20 needs `npx tsx`).
 
